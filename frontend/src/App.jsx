@@ -8,15 +8,16 @@ import Toast from './components/Toast.jsx'
 // ---------------------------------------------------------------------------
 const MOCK_DATA = {
   slides: [
-    { heading: 'Transform Your Life Daily',   description: 'Start journaling today and unlock clarity, creativity, and personal growth you never imagined possible.' },
-    { heading: 'Reduce Stress Instantly',      description: 'Writing your thoughts daily lowers cortisol levels and helps you process emotions before they overwhelm you.' },
-    { heading: 'Boost Your Creativity',        description: 'Journaling sparks new ideas by connecting thoughts freely, giving your creative mind space to breathe and explore.' },
-    { heading: 'Track Real Progress',          description: 'Reviewing past entries reveals patterns, celebrates wins, and shows how far you have grown over time.' },
-    { heading: 'Start Your Journey Tonight',   description: 'Grab a notebook, write three sentences. Your future self will thank you. Begin tonight.' },
+    { type: 'hook',      heading: 'English speakers say this wrong in every Spanish shop', description: '' },
+    { type: 'content',   heading: "Most say 'Estoy caliente' — but this means something very different", description: '' },
+    { type: 'translate', heading: '', left_text: "I'm just looking", right_text: 'Solo estoy mirando', description: '' },
+    { type: 'content',   heading: "Use this in any shop — it's polite and natural, never rude", description: '' },
+    { type: 'cta',       heading: 'Save this — follow @tutor_mia_mfl for daily Spanish phrases', description: '' },
   ],
   images:     [],    // set to array of PNG URLs to test image gallery
   images_url: null,
   csv:        null,
+  caption:    "English speakers make this mistake in Spanish shops every day.\n\nInstead of 'Estoy caliente', natives say 'Solo estoy mirando'.\nIt's natural, polite, and used everywhere in Spain.\n\nYou've probably said the wrong thing without knowing it.\nNow you'll never forget the right phrase.\n\nSave this — follow @tutor_mia_mfl for a new Spanish phrase every day\n\n#LearnSpanish #SpanishPhrases #SpanishTips #MFL #LanguageLearning",
 }
 
 // ---------------------------------------------------------------------------
@@ -46,11 +47,6 @@ export default function App() {
     setErrorMsg('')
     setStepMessage('')
 
-    // Append settings to the topic string — the backend takes a plain string
-    let fullTopic = topic.trim()
-    if (slides !== 5)            fullTopic += `. Create exactly ${slides} slides.`
-    if (tone !== 'professional') fullTopic += ` Use a ${tone} tone.`
-
     // Mock mode (set VITE_MOCK=true in .env.local to bypass the API)
     if (import.meta.env.VITE_MOCK === 'true') {
       await new Promise(r => setTimeout(r, 1800))
@@ -64,7 +60,7 @@ export default function App() {
       const res = await fetch('/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: fullTopic }),
+        body: JSON.stringify({ topic: topic.trim(), num_slides: slides }),
       })
 
       if (!res.ok) {
@@ -90,7 +86,7 @@ export default function App() {
           try { event = JSON.parse(line.slice(6)) } catch { continue }
 
           if (event.step === 'complete') {
-            setData({ images: event.images ?? [], slides: event.slides ?? [], csv: event.csv ?? null })
+            setData({ images: event.images ?? [], slides: event.slides ?? [], csv: event.csv ?? null, caption: event.caption ?? null })
             setStatus('done')
             showToast(event.images?.length > 0 ? 'Carousel rendered!' : 'Slides generated!')
           } else if (event.step === 'error') {
@@ -166,7 +162,7 @@ export default function App() {
             Generate your carousel
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Turn any topic into a polished 5-slide Instagram carousel in seconds.
+            Turn any topic into a polished Instagram carousel in seconds.
           </p>
         </div>
 
@@ -191,7 +187,7 @@ export default function App() {
 
       {/* ── Footer ─────────────────────────────────────────────── */}
       <footer className="text-center text-xs text-gray-400 dark:text-gray-600 py-6">
-        Powered by Claude · Contentdrips
+        Powered by Claude
       </footer>
 
       {/* ── Toast ──────────────────────────────────────────────── */}

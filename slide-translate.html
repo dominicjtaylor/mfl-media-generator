@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Carousel Slide</title>
+<title>Two Column Slide</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@500;600&family=Allura&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
 
 <style>
   * {
@@ -31,59 +31,55 @@
     overflow: hidden;
   }
 
-  /* ---------- FLAG (TOP LEFT) ---------- */
+  /* ---------- TWO COLUMN LAYOUT ---------- */
 
-  .flag {
+  .columns {
     position: absolute;
-    top: 100px;
-    left: 40px;
-    z-index: 3;
-  }
-
-  .flag img {
-    width: 120px; /* adjust as needed */
-    height: auto;
-    transform: rotate(-15deg);
-    transform-origin: center;
-  }
-
-  /* ---------- CENTER CONTENT ---------- */
-
-  .content {
-    position: absolute;
-    top: 25%;
+    top: 47%; /* slight shift down to create space for titles */
     left: 50%;
     transform: translate(-50%, -50%);
-    text-align: left;
-    width: 80%;
+    width: 85%;
+    height: 60%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
     z-index: 2;
   }
 
-  .title {
+  .column {
+    width: 45%;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* keeps title centered */
+  }
+
+  .column-title {
+    font-family: "Inter", sans-serif;
+    font-size: 40px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    margin-bottom: 60px; /* increased gap */
+    color: #6e3b34;
+    opacity: 0.85;
+    text-align: center;
+  }
+
+  .column-text {
     font-family: "Playfair Display", serif;
-    font-size: 65px;
+    font-size: 58px;
     line-height: 1.3;
     color: #6e3b34;
+    text-align: left; /* left-align text */
+    width: 100%;
   }
 
-  .text {
-    font-family: "Playfair Display", serif;
-    font-size: 60px;
-    line-height: 1.3;
-    color: #6e3b34;
-  }
+  /* ---------- DIVIDER LINE ---------- */
 
-  /* ---------- CURSIVE ACCENT ---------- */
-
-  .accent {
-    font-family: "Allura", cursive;
-    font-size: 160px;
-    line-height: 0.9;
-    display: inline-block;
-  }
-
-  .underline {
-    text-decoration: underline;
+  .divider {
+    width: 2px;
+    height: 100%;
+    background: #6e3b34;
+    opacity: 0.3;
   }
 
   /* ---------- BIG BACKGROUND NUMBER ---------- */
@@ -125,21 +121,27 @@
 
 <div class="slide">
 
-  <!-- FLAG -->
-  <div class="flag">
-    <img src="spain.png" alt="flag">
-  </div>
-
   <!-- BIG NUMBER -->
-  <div class="big-number">01</div>
+  <div class="big-number">{{NUMBER}}</div>
 
-  <div class="content">
-    <div class="text">
-      This is a <span class="accent">content</span> slide<br/>
-      for the <span class="underline">MFL carousel</span>
+  <!-- TWO COLUMNS -->
+  <div class="columns">
+
+    <div class="column">
+      <div class="column-title">English</div>
+      <div class="column-text">{{LEFT_TEXT}}</div>
     </div>
+
+    <div class="divider"></div>
+
+    <div class="column">
+      <div class="column-title">Spanish</div>
+      <div class="column-text">{{RIGHT_TEXT}}</div>
+    </div>
+
   </div>
 
+  <!-- FOOTER -->
   <div class="footer">@tutor_mia_mfl</div>
 
 </div>
