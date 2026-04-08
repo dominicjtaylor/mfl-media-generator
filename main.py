@@ -24,7 +24,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from utils import setup_logging
-from generator import generate_slides
 
 
 # ---------------------------------------------------------------------------
