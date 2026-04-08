@@ -2,43 +2,38 @@
 app.py — FastAPI carousel generator + React frontend.
 
 API routes
-  POST /generate  { "topic": "..." }  →  SSE stream of progress events
-  GET  /healthz   → { "status": "ok" }
+  POST /generate-hooks  { "content": "...", "language": "spanish" }  → { "hooks": [...] }
+  POST /render          { "slides": [...], "language": "spanish" }    → { "images": [...], "run_id": "..." }
+  GET  /healthz         → { "status": "ok" }
 
 Frontend (SPA)
   GET  /          → React app (index.html)
   GET  /assets/*  → JS/CSS bundles
   GET  /renders/* → rendered slide PNGs (served from /tmp/renders/)
-
-Pipeline
-  1. Claude generates 5 slides (JSON output)          → SSE step: "generating"
-  2. renderer.render_slides() → HTML + Playwright PNGs → SSE step: "rendering"
-  3. SSE step: "complete" { images: ["/renders/…/slide-n.png"] }
 """
 
-import json
 import logging
 import os
 from pathlib import Path
-from typing import Generator
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 load_dotenv()
 
 from utils import setup_logging
-from generator import generate_slides
+from generator import generate_hooks
 from renderer import render_slides
 
 setup_logging(os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("carousel.api")
 print("Starting FastAPI server...")
 
-app = FastAPI(title="Carousel Generator API", version="2.0.0")
+app = FastAPI(title="Carousel Generator API", version="3.0.0")
 
 DIST        = Path(__file__).parent / "frontend" / "dist"
 RENDERS_DIR = Path("/tmp/renders")
@@ -49,71 +44,39 @@ RENDERS_DIR.mkdir(parents=True, exist_ok=True)
 # Schemas
 # ---------------------------------------------------------------------------
 
-class GenerateRequest(BaseModel):
-    topic:      str
-    num_slides: int = 5
-
-    def validate_num_slides(self) -> None:
-        if not (4 <= self.num_slides <= 10):
-            raise HTTPException(status_code=422, detail="num_slides must be between 4 and 10")
-
-
-# ---------------------------------------------------------------------------
-# SSE helpers
-# ---------------------------------------------------------------------------
-
-def _sse(payload: dict) -> str:
-    return f"data: {json.dumps(payload)}\n\n"
+class SlideData(BaseModel):
+    type: Literal["first", "content", "translate", "last"]
+    text_main: str = ""
+    text_cursive: str = ""
+    text_secondary: str = ""
+    underline: str = ""
+    left_text: str = ""
+    right_text: str = ""
 
 
-def _stream(topic: str, num_slides: int) -> Generator[str, None, None]:
-    """Sync generator that emits SSE events at each real pipeline stage."""
-    print("HTML PIPELINE ACTIVE")
+class HooksRequest(BaseModel):
+    content: str
+    language: str = "spanish"
 
-    # Step 1: Generate slides via Claude
-    logger.info("Generating slides for topic: %r", topic)
-    yield _sse({"step": "generating", "message": "Generating and refining carousel content..."})
 
-    try:
-        slides, caption = generate_slides(topic, num_slides=num_slides)
-    except Exception as exc:
-        logger.error("Slide generation failed: %s", exc)
-        yield _sse({"step": "error", "message": f"Content generation failed: {exc}"})
-        return
+class HooksResponse(BaseModel):
+    hooks: list[str]
 
-    logger.info("Generated %d slides", len(slides))
-    slide_models = []
-    for s in slides:
-        if s.get("type") == "translate":
-            slide_models.append({
-                "type":       "translate",
-                "heading":    "",
-                "left_text":  s.get("left_text",  ""),
-                "right_text": s.get("right_text", ""),
-                "description": "",
-            })
-        else:
-            slide_models.append({
-                "type":        s.get("type", "content"),
-                "heading":     s["heading"],
-                "description": s.get("description", ""),
-            })
 
-    # Step 2: Render slides to PNG via Playwright
-    print("Rendering slides via Playwright")
-    yield _sse({"step": "rendering", "message": "Rendering slides..."})
+class RenderRequest(BaseModel):
+    slides: list[SlideData]
+    language: str = "spanish"
 
-    try:
-        png_paths, run_id = render_slides(slides, renders_base=str(RENDERS_DIR))
-    except Exception as exc:
-        logger.error("Rendering failed: %s", exc)
-        yield _sse({"step": "error", "message": f"Rendering failed: {exc}"})
-        return
+    @model_validator(mode="after")
+    def validate_slide_count(self):
+        if not (4 <= len(self.slides) <= 10):
+            raise ValueError("slides must contain between 4 and 10 items")
+        return self
 
-    image_urls = [f"/renders/{run_id}/slide-{i + 1}.png" for i in range(len(png_paths))]
-    logger.info("Carousel ready: %d images for run %s", len(image_urls), run_id)
 
-    yield _sse({"step": "complete", "images": image_urls, "slides": slide_models, "caption": caption})
+class RenderResponse(BaseModel):
+    images: list[str]
+    run_id: str
 
 
 # ---------------------------------------------------------------------------
@@ -125,20 +88,34 @@ def healthz():
     return {"status": "ok"}
 
 
-@app.post("/generate", tags=["carousel"])
-def generate(req: GenerateRequest):
-    print("=== NEW BACKEND RUNNING ===")
-    print(f"Received topic={req.topic!r} num_slides={req.num_slides}")
-    topic = req.topic.strip()
-    if not topic:
-        raise HTTPException(status_code=422, detail="topic must not be empty")
-    req.validate_num_slides()
+@app.post("/generate-hooks", response_model=HooksResponse, tags=["carousel"])
+def generate_hooks_endpoint(req: HooksRequest):
+    content = req.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="content must not be empty")
 
-    return StreamingResponse(
-        _stream(topic, req.num_slides),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    try:
+        hooks = generate_hooks(content, req.language)
+    except Exception as exc:
+        logger.error("Hook generation failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Hook generation failed: {exc}")
+
+    return HooksResponse(hooks=hooks)
+
+
+@app.post("/render", response_model=RenderResponse, tags=["carousel"])
+def render_endpoint(req: RenderRequest):
+    slides_dicts = [s.model_dump() for s in req.slides]
+
+    try:
+        png_paths, run_id = render_slides(slides_dicts, renders_base=str(RENDERS_DIR))
+    except Exception as exc:
+        logger.error("Rendering failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Rendering failed: {exc}")
+
+    image_urls = [f"/renders/{run_id}/slide-{i + 1}.png" for i in range(len(png_paths))]
+    logger.info("Render complete: %d images for run %s", len(image_urls), run_id)
+    return RenderResponse(images=image_urls, run_id=run_id)
 
 
 # ---------------------------------------------------------------------------

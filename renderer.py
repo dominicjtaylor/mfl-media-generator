@@ -55,6 +55,21 @@ def _md_bold_to_html(text: str) -> str:
 # Step 1: HTML injection
 # ---------------------------------------------------------------------------
 
+def _normalise_slide(slide: dict) -> dict:
+    """Map new schema fields (text_main/text_secondary) to legacy heading/description.
+
+    Accepts both old schema (heading/description) and new schema (text_main/...).
+    Old-schema dicts pass through unchanged for backward compatibility.
+    """
+    if "text_main" in slide:
+        return {
+            **slide,
+            "heading":     slide.get("text_main", ""),
+            "description": slide.get("text_secondary", ""),
+        }
+    return slide
+
+
 def inject_slide(index: int, slide: dict, total: int) -> str:
     """Inject slide data into the appropriate HTML template.
 
@@ -65,6 +80,7 @@ def inject_slide(index: int, slide: dict, total: int) -> str:
                   "left_text"/"right_text" for translate slides.
     total : int   Total number of slides (determines which index is the last).
     """
+    slide = _normalise_slide(slide)
     last_index    = total - 1
     content_index = index - 1   # 0-based among non-first/last slides
     number        = _CONTENT_NUMS[content_index] if 0 < index < last_index else None

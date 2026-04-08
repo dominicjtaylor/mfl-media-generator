@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 
 // ---------------------------------------------------------------------------
 // Device detection
@@ -54,16 +54,6 @@ async function downloadAll(images) {
     // Small gap prevents browsers from blocking rapid-fire downloads
     if (i < images.length - 1) await new Promise(r => setTimeout(r, 300))
   }
-}
-
-// ---------------------------------------------------------------------------
-// Slide type label
-// ---------------------------------------------------------------------------
-function slideLabel(index, total, slideType) {
-  if (index === 0)             return { label: 'Hook',      color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' }
-  if (index === total - 1)     return { label: 'CTA',       color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' }
-  if (slideType === 'translate') return { label: 'Translate', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' }
-  return                              { label: 'Content',   color: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' }
 }
 
 // ---------------------------------------------------------------------------
@@ -389,176 +379,29 @@ function ImagesGallery({ images, isMobile, onToast }) {
 }
 
 // ---------------------------------------------------------------------------
-// Caption card
-// ---------------------------------------------------------------------------
-function CaptionCard({ caption, onToast }) {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(caption)
-      setCopied(true)
-      onToast('Caption copied!')
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      onToast('Copy failed — select and copy manually')
-    }
-  }
-
-  // Split into lines, separating hashtags (lines starting with #) from body
-  const lines     = caption.split('\n').filter(l => l.trim())
-  const hashLines = lines.filter(l => l.trim().startsWith('#'))
-  const bodyLines = lines.filter(l => !l.trim().startsWith('#'))
-
-  return (
-    <div className="space-y-3 animate-slide-up">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-semibold text-sm">Caption</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Ready to paste into Instagram</p>
-        </div>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-        >
-          {copied ? (
-            <>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              Copied!
-            </>
-          ) : (
-            <>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-              Copy
-            </>
-          )}
-        </button>
-      </div>
-
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 shadow-sm space-y-3">
-        {/* Body lines */}
-        <div className="space-y-2">
-          {bodyLines.map((line, i) => (
-            <p
-              key={i}
-              className={
-                i === 0
-                  ? 'font-semibold text-sm leading-snug'                          // hook line
-                  : line.toLowerCase().includes('@tutor_mia_mfl')
-                    ? 'text-xs text-accent font-medium'                           // CTA line
-                    : 'text-sm text-gray-600 dark:text-gray-400 leading-relaxed'  // body lines
-              }
-            >
-              {line}
-            </p>
-          ))}
-        </div>
-
-        {/* Hashtags */}
-        {hashLines.length > 0 && (
-          <p className="text-xs text-blue-500 dark:text-blue-400 leading-relaxed pt-1 border-t border-gray-100 dark:border-gray-800">
-            {hashLines.join(' ')}
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Slides preview
-// ---------------------------------------------------------------------------
-function SlidesPreview({ slides }) {
-  return (
-    <div className="space-y-5 animate-slide-up">
-      <div>
-        <h2 className="font-semibold text-sm">Slide preview</h2>
-        <p className="text-xs text-gray-400 mt-0.5">{slides.length} slides</p>
-      </div>
-
-      <div className="space-y-3">
-        {slides.map((slide, i) => {
-          const { label, color } = slideLabel(i, slides.length, slide.type)
-          return (
-            <div
-              key={i}
-              className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 space-y-2.5 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-700 transition-all duration-150"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-400 dark:text-gray-600 tabular-nums w-4">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${color}`}>
-                  {label}
-                </span>
-              </div>
-              {slide.type === 'translate' ? (
-                <div className="flex gap-4 text-sm">
-                  <span className="text-gray-500 dark:text-gray-400 flex-1">EN: {slide.left_text}</span>
-                  <span className="font-semibold text-blue-700 dark:text-blue-300 flex-1">ES: {slide.right_text}</span>
-                </div>
-              ) : (
-                <>
-                  <p className="font-semibold text-base leading-snug">{slide.heading}</p>
-                  {slide.description && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{slide.description}</p>
-                  )}
-                </>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Main Output component
 // ---------------------------------------------------------------------------
-export default function Output({ status, data, errorMsg, stepMessage, onToast }) {
+export default function Output({ images, renderLoading, errorMsg, onToast }) {
   const isMobile = useIsMobile()
 
-  if (status === 'loading') return <StatusMessage message={stepMessage} />
+  if (renderLoading) return <StatusMessage message="Rendering slides…" />
 
-  if (status === 'error') {
+  if (errorMsg) {
     return (
       <div className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 p-5 text-sm text-red-600 dark:text-red-400 animate-slide-up">
         <div className="flex items-start gap-3">
           <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <span>{errorMsg || 'Something went wrong. Please try again.'}</span>
+          <span>{errorMsg}</span>
         </div>
       </div>
     )
   }
 
-  if (status !== 'done' || !data) return null
-
-  const { images = [], slides = [], caption } = data
+  if (!images || images.length === 0) return null
 
   return (
-    <div className="space-y-8">
-      {images.length > 0 && (
-        <ImagesGallery
-          images={images}
-          isMobile={isMobile}
-          onToast={onToast}
-        />
-      )}
-      {caption && (
-        <CaptionCard caption={caption} onToast={onToast} />
-      )}
-      {slides.length > 0 && (
-        <SlidesPreview slides={slides} />
-      )}
-    </div>
+    <ImagesGallery images={images} isMobile={isMobile} onToast={onToast} />
   )
 }

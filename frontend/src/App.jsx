@@ -1,35 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Form from './components/Form.jsx'
+import SlideEditor from './components/SlideEditor.jsx'
 import Output from './components/Output.jsx'
 import Toast from './components/Toast.jsx'
 
 // ---------------------------------------------------------------------------
-// Mock response — used when VITE_MOCK=true (bypasses API in dev)
+// Build an empty slides array from type assignments
 // ---------------------------------------------------------------------------
-const MOCK_DATA = {
-  slides: [
-    { type: 'hook',      heading: 'English speakers say this wrong in every Spanish shop', description: '' },
-    { type: 'content',   heading: "Most say 'Estoy caliente' — but this means something very different", description: '' },
-    { type: 'translate', heading: '', left_text: "I'm just looking", right_text: 'Solo estoy mirando', description: '' },
-    { type: 'content',   heading: "Use this in any shop — it's polite and natural, never rude", description: '' },
-    { type: 'cta',       heading: 'Save this — follow @tutor_mia_mfl for daily Spanish phrases', description: '' },
-  ],
-  images:     [],    // set to array of PNG URLs to test image gallery
-  images_url: null,
-  csv:        null,
-  caption:    "English speakers make this mistake in Spanish shops every day.\n\nInstead of 'Estoy caliente', natives say 'Solo estoy mirando'.\nIt's natural, polite, and used everywhere in Spain.\n\nYou've probably said the wrong thing without knowing it.\nNow you'll never forget the right phrase.\n\nSave this — follow @tutor_mia_mfl for a new Spanish phrase every day\n\n#LearnSpanish #SpanishPhrases #SpanishTips #MFL #LanguageLearning",
+function buildEmptySlides(types) {
+  return types.map(type => ({
+    type,
+    text_main:      '',
+    text_cursive:   '',
+    text_secondary: '',
+    underline:      '',
+    left_text:      '',
+    right_text:     '',
+  }))
 }
 
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 export default function App() {
-  const [dark, setDark]         = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const [status, setStatus]     = useState('idle')   // idle | loading | done | error
-  const [responseData, setData] = useState(null)     // full API response object
-  const [errorMsg, setErrorMsg] = useState('')
-  const [stepMessage, setStepMessage] = useState('') // current SSE progress message
-  const [toast, setToast]       = useState(null)     // { message, type }
+  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+  // phase: "configure" | "edit" | "done"
+  const [phase,         setPhase]         = useState('configure')
+  const [language,      setLanguage]      = useState('spanish')
+  const [slides,        setSlides]        = useState([])
+  const [hooks,         setHooks]         = useState([])
+  const [hookLoading,   setHookLoading]   = useState(false)
+  const [renderLoading, setRenderLoading] = useState(false)
+  const [images,        setImages]        = useState([])
+  const [errorMsg,      setErrorMsg]      = useState('')
+  const [toast,         setToast]         = useState(null)
 
   // Sync dark class on <html>
   useEffect(() => {
@@ -41,78 +46,83 @@ export default function App() {
     setTimeout(() => setToast(null), 3500)
   }, [])
 
-  const handleGenerate = useCallback(async ({ topic, tone, slides }) => {
-    setStatus('loading')
-    setData(null)
+  // ── Phase 1: Config submitted → initialise slides ────────────────────────
+  const handleConfigSubmit = useCallback(({ language: lang, types }) => {
+    setLanguage(lang)
+    setSlides(buildEmptySlides(types))
+    setHooks([])
+    setImages([])
     setErrorMsg('')
-    setStepMessage('')
+    setPhase('edit')
+  }, [])
 
-    // Mock mode (set VITE_MOCK=true in .env.local to bypass the API)
-    if (import.meta.env.VITE_MOCK === 'true') {
-      await new Promise(r => setTimeout(r, 1800))
-      setData(MOCK_DATA)
-      setStatus('done')
-      showToast('Carousel generated! (demo mode)')
-      return
-    }
+  // ── Phase 2: Slide field change ──────────────────────────────────────────
+  const handleSlideChange = useCallback((index, field, value) => {
+    setSlides(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
+  }, [])
+
+  // ── Phase 2: Request AI hook suggestions ────────────────────────────────
+  const handleRequestHooks = useCallback(async () => {
+    const contentSummary = slides
+      .map(s => s.text_main || s.left_text || s.right_text)
+      .filter(Boolean)
+      .join(' | ')
+
+    setHookLoading(true)
+    setHooks([])
 
     try {
-      const res = await fetch('/generate', {
+      const res = await fetch('/generate-hooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.trim(), num_slides: slides }),
+        body: JSON.stringify({ content: contentSummary || 'carousel content', language }),
       })
-
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.detail || `Server error (${res.status})`)
       }
-
-      // Stream SSE events from the response body
-      const reader  = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer    = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() // keep any incomplete line for next chunk
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          let event
-          try { event = JSON.parse(line.slice(6)) } catch { continue }
-
-          if (event.step === 'complete') {
-            setData({ images: event.images ?? [], slides: event.slides ?? [], csv: event.csv ?? null, caption: event.caption ?? null })
-            setStatus('done')
-            showToast(event.images?.length > 0 ? 'Carousel rendered!' : 'Slides generated!')
-          } else if (event.step === 'error') {
-            setErrorMsg(event.message || 'Something went wrong.')
-            setStatus('error')
-            showToast(event.message || 'Something went wrong.', 'error')
-          } else {
-            setStepMessage(event.message || '')
-          }
-        }
-      }
+      const data = await res.json()
+      setHooks(data.hooks || [])
     } catch (err) {
-      const message = err.message?.includes('Failed to fetch')
-        ? 'Could not reach the server. Check your connection.'
-        : err.message || 'Something went wrong.'
-      setErrorMsg(message)
-      setStatus('error')
-      showToast(message, 'error')
+      showToast(err.message || 'Hook generation failed', 'error')
+    } finally {
+      setHookLoading(false)
     }
-  }, [showToast])
+  }, [slides, language, showToast])
 
-  const handleReset = useCallback(() => {
-    setStatus('idle')
-    setData(null)
+  // ── Phase 2: Render carousel → phase "done" ─────────────────────────────
+  const handleRender = useCallback(async () => {
+    setRenderLoading(true)
     setErrorMsg('')
-  }, [])
+
+    try {
+      const res = await fetch('/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slides, language }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail || `Server error (${res.status})`)
+      }
+      const data = await res.json()
+      setImages(data.images || [])
+      setPhase('done')
+      showToast('Carousel rendered!')
+    } catch (err) {
+      const msg = err.message?.includes('Failed to fetch')
+        ? 'Could not reach the server. Check your connection.'
+        : err.message || 'Rendering failed.'
+      setErrorMsg(msg)
+      showToast(msg, 'error')
+    } finally {
+      setRenderLoading(false)
+    }
+  }, [slides, language, showToast])
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -128,7 +138,7 @@ export default function App() {
                 <rect x="8" y="8" width="5" height="5" rx="1" fill="white" fillOpacity=".3"/>
               </svg>
             </span>
-            <span className="font-semibold text-sm tracking-tight">Carousel</span>
+            <span className="font-semibold text-sm tracking-tight">MFL Carousel</span>
           </div>
 
           <button
@@ -154,40 +164,117 @@ export default function App() {
       </header>
 
       {/* ── Main ───────────────────────────────────────────────── */}
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-12 flex flex-col gap-10">
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-10 flex flex-col gap-8">
 
-        {/* Hero */}
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Generate your carousel
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Turn any topic into a polished Instagram carousel in seconds.
-          </p>
-        </div>
-
-        {/* Form */}
-        <Form
-          onGenerate={handleGenerate}
-          loading={status === 'loading'}
-          onReset={status !== 'idle' ? handleReset : null}
-        />
-
-        {/* Output */}
-        {(status === 'loading' || status === 'done' || status === 'error') && (
-          <Output
-            status={status}
-            data={responseData}
-            errorMsg={errorMsg}
-            stepMessage={stepMessage}
-            onToast={showToast}
-          />
+        {/* ── Configure phase ── */}
+        {phase === 'configure' && (
+          <>
+            <div className="text-center space-y-2">
+              <h1 className="text-3xl font-bold tracking-tight">Build your carousel</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
+                Set up your slides, fill in the content, and let AI suggest your hook.
+              </p>
+            </div>
+            <Form onConfigSubmit={handleConfigSubmit} />
+          </>
         )}
+
+        {/* ── Edit phase ── */}
+        {phase === 'edit' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">Fill in your slides</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 capitalize">{language} · {slides.length} slides</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhase('configure')}
+                className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                ← Back
+              </button>
+            </div>
+
+            <SlideEditor
+              slides={slides}
+              language={language}
+              hooks={hooks}
+              hookLoading={hookLoading}
+              onChange={handleSlideChange}
+              onRequestHooks={handleRequestHooks}
+            />
+
+            <div className="flex flex-col gap-3 pt-2">
+              {errorMsg && (
+                <p className="text-xs text-red-500 text-center">{errorMsg}</p>
+              )}
+              <button
+                type="button"
+                onClick={handleRender}
+                disabled={renderLoading}
+                className="
+                  w-full flex items-center justify-center gap-2
+                  bg-accent hover:bg-accent-hover
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  text-white font-semibold text-sm
+                  px-5 py-3.5 rounded-xl
+                  transition-all active:scale-[0.98]
+                  shadow-sm
+                "
+              >
+                {renderLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Rendering…
+                  </>
+                ) : (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                    Render Carousel
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Done phase ── */}
+        {phase === 'done' && (
+          <>
+            <Output
+              images={images}
+              renderLoading={renderLoading}
+              errorMsg={errorMsg}
+              onToast={showToast}
+            />
+            <button
+              type="button"
+              onClick={() => { setPhase('edit'); setImages([]); setErrorMsg('') }}
+              className="
+                w-full py-3 rounded-xl text-sm font-medium
+                border border-gray-200 dark:border-gray-700
+                text-gray-500 dark:text-gray-400
+                hover:text-gray-900 dark:hover:text-gray-100
+                hover:border-gray-300 dark:hover:border-gray-600
+                transition-colors
+              "
+            >
+              ← Edit slides
+            </button>
+          </>
+        )}
+
       </main>
 
       {/* ── Footer ─────────────────────────────────────────────── */}
       <footer className="text-center text-xs text-gray-400 dark:text-gray-600 py-6">
-        Powered by Claude
+        MFL Media Generator
       </footer>
 
       {/* ── Toast ──────────────────────────────────────────────── */}
