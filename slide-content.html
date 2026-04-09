@@ -38,10 +38,7 @@
   /* ---------- FLAG (TOP LEFT) ---------- */
 
   .flag {
-    position: absolute;
-    top: 150px;
-    left: 40px;
-    z-index: 3;
+    margin-bottom: 30px;
   }
 
   .flag img {
@@ -55,12 +52,15 @@
 
   .content {
     position: absolute;
-    top: 35%;
+    top: 48%;
     left: 50%;
     transform: translate(-50%, -50%);
-    text-align: left;
+
     width: 80%;
-    z-index: 2;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; left aligned
   }
 
   .text {
