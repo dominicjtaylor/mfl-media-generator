@@ -107,6 +107,9 @@ def generate_hooks_endpoint(req: HooksRequest):
 @app.post("/render", response_model=RenderResponse, tags=["carousel"])
 def render_endpoint(req: RenderRequest):
     slides_dicts = [s.model_dump() for s in req.slides]
+    # Propagate language into each slide so the renderer can select the correct flag
+    for slide in slides_dicts:
+        slide["language"] = req.language
 
     try:
         png_paths, run_id = render_slides(slides_dicts, renders_base=str(RENDERS_DIR))

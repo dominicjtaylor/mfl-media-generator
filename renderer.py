@@ -14,9 +14,10 @@ Template mapping
 
 Placeholders
 ------------
-  {{TEXT}}       -- raw HTML; bold/italic markdown converted before injection
-  {{LEFT_TEXT}}  -- translate slide left column
-  {{RIGHT_TEXT}} -- translate slide right column
+  {{TEXT}}        -- raw HTML; bold/italic markdown converted before injection
+  {{LEFT_TEXT}}   -- translate slide left column
+  {{RIGHT_TEXT}}  -- translate slide right column
+  {{FLAG_BLOCK}}  -- content slide flag element (language-driven); empty string when no flag
 
 Output
 ------
@@ -34,6 +35,11 @@ from pathlib import Path
 logger = logging.getLogger("carousel.renderer")
 
 _ROOT = Path(__file__).parent   # project root (templates live here)
+
+_FLAG_MAP = {
+    "spanish": "spain.png",
+    "italian": "italy.png",
+}
 
 _LAST_SLIDE_DEFAULT = (
     '<div class="title">'
@@ -135,6 +141,17 @@ def inject_slide(index: int, slide: dict, total: int) -> str:
 
     html = template_path.read_text(encoding="utf-8")
     html = html.replace("{{TEXT}}", text)
+
+    # Inject flag block for content slides
+    if template_name == "slide-content.html":
+        lang     = (slide.get("language") or "").lower()
+        flag_src = _FLAG_MAP.get(lang, "")
+        if flag_src:
+            flag_block = f'<div class="flag"><img src="{flag_src}" alt="flag"></div>'
+        else:
+            flag_block = ""
+        html = html.replace("{{FLAG_BLOCK}}", flag_block)
+
     return html
 
 
@@ -165,12 +182,13 @@ def render_slides(
     out_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Render run %s -> %s", run_id, out_dir)
 
-    # Copy logo.png so relative src="logo.png" in templates resolves correctly
-    logo_src = _ROOT / "logo.png"
-    if logo_src.exists():
-        shutil.copy2(logo_src, out_dir / "logo.png")
-    else:
-        logger.warning("logo.png not found at %s -- brand logo will be missing", logo_src)
+    # Copy static assets so relative paths in templates resolve correctly
+    for asset in ["logo.png", "spain.png", "italy.png"]:
+        src = _ROOT / asset
+        if src.exists():
+            shutil.copy2(src, out_dir / asset)
+        else:
+            logger.warning("Asset not found: %s", src)
 
     # Write HTML files
     html_paths: list[Path] = []
@@ -205,7 +223,7 @@ def render_slides(
             )
             try:
                 context = browser.new_context(
-                    viewport={"width": 1080, "height": 1350},
+                    viewport={"width": 1080, "height": 1080},
                     device_scale_factor=2,
                 )
                 for i, html_path in enumerate(html_paths):
@@ -213,12 +231,11 @@ def render_slides(
                     try:
                         url = f"file://{html_path.absolute()}"
                         logger.debug("Loading slide %d — %s", i + 1, url)
-                        # Use domcontentloaded (not networkidle) so we don't block on the
-                        # Google Fonts CDN request.  The CDN URL contains @ and ; which
-                        # trigger Playwright's internal URL pattern matcher and cause
-                        # "The string did not match the expected pattern".
+                        # Use domcontentloaded (not networkidle) — networkidle blocks on
+                        # Google Fonts CDN URLs which contain @ and ; characters that
+                        # trigger Playwright's internal URL pattern matcher.
                         page.goto(url, wait_until="domcontentloaded", timeout=15_000)
-                        # Wait for fonts — resolves even if the CDN is unreachable,
+                        # Wait for fonts — resolves even if CDN is unreachable,
                         # falling back to the system font stack defined in the templates.
                         try:
                             page.evaluate("document.fonts.ready")
@@ -230,7 +247,12 @@ def render_slides(
                             )
                         png_path = out_dir / f"slide-{i + 1}.png"
                         logger.debug("Screenshotting slide %d → %s", i + 1, png_path.name)
-                        page.screenshot(path=str(png_path), full_page=False)
+                        # Target the .slide element directly — avoids any body/viewport
+                        # whitespace and guarantees a clean 1080×1080 crop.
+                        slide_el = page.query_selector(".slide")
+                        if slide_el is None:
+                            raise RuntimeError(f"Slide {i + 1}: .slide element not found in template")
+                        slide_el.screenshot(path=str(png_path))
                         png_paths.append(str(png_path))
                         logger.info("Rendered slide %d/%d", i + 1, len(slides))
                     except PlaywrightError as exc:
