@@ -386,11 +386,23 @@ function CaptionCard({ caption, onChange, onToast }) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(caption)
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(caption)
+      } else {
+        // Fallback for non-HTTPS or older browsers
+        const ta = document.createElement('textarea')
+        ta.value = caption
+        ta.style.cssText = 'position:fixed;opacity:0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
       setCopied(true)
       onToast('Caption copied!')
       setTimeout(() => setCopied(false), 2000)
-    } catch {
+    } catch (err) {
+      console.error('Copy failed:', err)
       onToast('Copy failed — select and copy manually', 'error')
     }
   }

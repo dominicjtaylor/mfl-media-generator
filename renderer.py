@@ -107,9 +107,11 @@ def inject_slide(index: int, slide: dict, total: int) -> str:
         template_path = _ROOT / "slide-translate.html"
         if not template_path.exists():
             raise FileNotFoundError(f"Template not found: {template_path}")
+        lang_title = (slide.get("language") or "Spanish").capitalize()
         html = template_path.read_text(encoding="utf-8")
         html = html.replace("{{LEFT_TEXT}}", left_text)
         html = html.replace("{{RIGHT_TEXT}}", right_text)
+        html = html.replace("{{LANGUAGE_TITLE}}", lang_title)
         return html
 
     # --- Standard slides (first / content / last) ---

@@ -135,7 +135,7 @@ Structure every caption exactly like this:
 2. One or two short lines explaining what the learner will get from this post
 3. An optional gentle CTA (save, share, or come back to it)
 4. A blank line, then 3–5 relevant hashtags on one line
-5. A blank line, then exactly: "Follow @tutora_mia_mfl for daily phrases"
+5. A blank line, then exactly: "Follow @tutor_mia_mfl for daily phrases"
 
 Rules:
 - Keep it concise — no more than 6 lines before the hashtags
@@ -143,7 +143,7 @@ Rules:
 - Use "you" to speak directly to the learner
 - Hashtags: choose from #languagelearning #spanish #italian #learnlanguages \
   #learningspanish #learningitalian #mfl — do NOT use #french
-- End line must be exactly: Follow @tutora_mia_mfl for daily phrases
+- End line must be exactly: Follow @tutor_mia_mfl for daily phrases
 - Return plain text only — no markdown, no labels, no preamble
 """
 
