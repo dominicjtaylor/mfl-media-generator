@@ -379,9 +379,75 @@ function ImagesGallery({ images, isMobile, onToast }) {
 }
 
 // ---------------------------------------------------------------------------
+// Caption card — editable + copyable
+// ---------------------------------------------------------------------------
+function CaptionCard({ caption, onChange, onToast }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(caption)
+      setCopied(true)
+      onToast('Caption copied!')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      onToast('Copy failed — select and copy manually', 'error')
+    }
+  }
+
+  return (
+    <div className="space-y-3 animate-slide-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold text-sm">Caption</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Edit then copy to Instagram</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        >
+          {copied ? (
+            <>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+
+      <textarea
+        value={caption}
+        onChange={e => onChange(e.target.value)}
+        rows={10}
+        className="
+          w-full resize-y rounded-xl px-4 py-3.5 text-sm leading-relaxed
+          bg-white dark:bg-gray-900
+          border border-gray-200 dark:border-gray-800
+          text-gray-700 dark:text-gray-300
+          focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent
+          transition-shadow shadow-sm
+          font-mono
+        "
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main Output component
 // ---------------------------------------------------------------------------
-export default function Output({ images, renderLoading, errorMsg, onToast }) {
+export default function Output({ images, caption, onCaptionChange, renderLoading, errorMsg, onToast }) {
   const isMobile = useIsMobile()
 
   if (renderLoading) return <StatusMessage message="Rendering slides…" />
@@ -402,6 +468,11 @@ export default function Output({ images, renderLoading, errorMsg, onToast }) {
   if (!images || images.length === 0) return null
 
   return (
-    <ImagesGallery images={images} isMobile={isMobile} onToast={onToast} />
+    <div className="space-y-8">
+      <ImagesGallery images={images} isMobile={isMobile} onToast={onToast} />
+      {caption !== undefined && (
+        <CaptionCard caption={caption} onChange={onCaptionChange} onToast={onToast} />
+      )}
+    </div>
   )
 }

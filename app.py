@@ -26,7 +26,7 @@ from pydantic import BaseModel, model_validator
 load_dotenv()
 
 from utils import setup_logging
-from generator import generate_hooks
+from generator import generate_hooks, generate_caption
 from renderer import render_slides
 
 setup_logging(os.environ.get("LOG_LEVEL", "INFO"))
@@ -77,6 +77,7 @@ class RenderRequest(BaseModel):
 class RenderResponse(BaseModel):
     images: list[str]
     run_id: str
+    caption: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +114,16 @@ def render_endpoint(req: RenderRequest):
         logger.error("Rendering failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"Rendering failed: {exc}")
 
+    # Generate caption (non-fatal — empty string on failure)
+    caption = ""
+    try:
+        caption = generate_caption(slides_dicts)
+    except Exception as exc:
+        logger.warning("Caption generation failed (non-fatal): %s", exc)
+
     image_urls = [f"/renders/{run_id}/slide-{i + 1}.png" for i in range(len(png_paths))]
     logger.info("Render complete: %d images for run %s", len(image_urls), run_id)
-    return RenderResponse(images=image_urls, run_id=run_id)
+    return RenderResponse(images=image_urls, run_id=run_id, caption=caption)
 
 
 # ---------------------------------------------------------------------------

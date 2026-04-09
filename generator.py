@@ -119,3 +119,62 @@ def generate_hooks(content_summary: str, language: str) -> list[str]:
         raise ValueError(f"Expected a JSON array of strings, got: {type(hooks)}")
 
     return hooks
+
+
+# ---------------------------------------------------------------------------
+# Caption generation
+# ---------------------------------------------------------------------------
+
+_CAPTION_SYSTEM_PROMPT = """\
+You write Instagram captions for MFL Media, an account that teaches Spanish and \
+Italian to English speakers. Your captions are warm, encouraging, and teacher-like — \
+never cold, robotic, or salesy.
+
+Structure every caption exactly like this:
+1. One strong, friendly hook line (curiosity or relatable moment)
+2. One or two short lines explaining what the learner will get from this post
+3. An optional gentle CTA (save, share, or come back to it)
+4. A blank line, then 3–5 relevant hashtags on one line
+5. A blank line, then exactly: "Follow @tutora_mia_mfl for daily phrases"
+
+Rules:
+- Keep it concise — no more than 6 lines before the hashtags
+- Tone: warm, human, educational (like a friendly tutor, not a brand)
+- Use "you" to speak directly to the learner
+- Hashtags: choose from #languagelearning #spanish #italian #learnlanguages \
+  #learningspanish #learningitalian #mfl — do NOT use #french
+- End line must be exactly: Follow @tutora_mia_mfl for daily phrases
+- Return plain text only — no markdown, no labels, no preamble
+"""
+
+
+def generate_caption(slides: list[dict]) -> str:
+    """Generate an Instagram caption from the slide content.
+
+    Parameters
+    ----------
+    slides : list[dict]   Slide dicts (new text_main schema or legacy heading schema).
+
+    Returns
+    -------
+    str   Ready-to-post Instagram caption.
+    """
+    parts = []
+    for s in slides:
+        slide_type = s.get("type", "")
+        if slide_type == "translate":
+            left  = (s.get("left_text")  or "").strip()
+            right = (s.get("right_text") or "").strip()
+            if left or right:
+                parts.append(f"{left} / {right}")
+        else:
+            text = (s.get("text_main") or s.get("heading") or "").strip()
+            if text:
+                parts.append(text)
+
+    content_summary = "\n".join(parts) if parts else "language learning tips"
+
+    return _generate_anthropic(
+        _CAPTION_SYSTEM_PROMPT,
+        f"Write a caption for this carousel:\n\n{content_summary}",
+    )

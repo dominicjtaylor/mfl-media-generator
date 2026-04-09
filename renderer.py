@@ -9,13 +9,14 @@ Pipeline
 Template mapping
 ----------------
   index 0          -> slide-first.html
-  index 1 to n-2   -> slide-content.html   ({{NUMBER}} = "01" ... "05")
+  index 1 to n-2   -> slide-content.html or slide-translate.html
   index n-1        -> slide-last.html
 
 Placeholders
 ------------
-  {{TEXT}}   -- raw HTML; <strong> intentionally NOT escaped
-  {{NUMBER}} -- zero-padded content-slide number ("01"–"05")
+  {{TEXT}}       -- raw HTML; bold/italic markdown converted before injection
+  {{LEFT_TEXT}}  -- translate slide left column
+  {{RIGHT_TEXT}} -- translate slide right column
 
 Output
 ------
@@ -32,23 +33,32 @@ from pathlib import Path
 
 logger = logging.getLogger("carousel.renderer")
 
-_ROOT         = Path(__file__).parent   # project root (templates live here)
-# Supports up to 8 content slides (10 total - hook - cta = 8)
-_CONTENT_NUMS = ["01", "02", "03", "04", "05", "06", "07", "08"]
+_ROOT = Path(__file__).parent   # project root (templates live here)
+
+_LAST_SLIDE_DEFAULT = (
+    '<div class="title">'
+    'Follow along and start sounding '
+    '<div class="accent">native</div>'
+    '</div>'
+)
 
 
 # ---------------------------------------------------------------------------
-# Markdown bold → HTML
+# Markdown → HTML (bold + italic)
 # ---------------------------------------------------------------------------
 
-def _md_bold_to_html(text: str) -> str:
-    """Convert **word** markers to <strong>word</strong>.
+def _md_to_html(text: str) -> str:
+    """Convert markdown bold/italic markers to inline HTML.
 
-    Leaves text without markers at normal weight (font-weight: 300 in templates).
-    If no markers are present the text is returned unchanged — nothing is
-    auto-bolded.
+    **text** → <strong>text</strong>
+    *text*   → <em>text</em>
+
+    Bold is processed first so the double-asterisks in **bold** are consumed
+    before the single-asterisk italic pass runs.
     """
-    return re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'\*([^*]+?)\*',   r'<em>\1</em>',        text)
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -80,10 +90,8 @@ def inject_slide(index: int, slide: dict, total: int) -> str:
                   "left_text"/"right_text" for translate slides.
     total : int   Total number of slides (determines which index is the last).
     """
-    slide = _normalise_slide(slide)
-    last_index    = total - 1
-    content_index = index - 1   # 0-based among non-first/last slides
-    number        = _CONTENT_NUMS[content_index] if 0 < index < last_index else None
+    slide      = _normalise_slide(slide)
+    last_index = total - 1
 
     # --- Translate slide ---
     if slide.get("type") == "translate":
@@ -92,31 +100,28 @@ def inject_slide(index: int, slide: dict, total: int) -> str:
 
         template_path = _ROOT / "slide-translate.html"
         if not template_path.exists():
-            raise FileNotFoundError(
-                f"Template not found: {template_path}. "
-                "Ensure slide-translate.html exists in the project root."
-            )
+            raise FileNotFoundError(f"Template not found: {template_path}")
         html = template_path.read_text(encoding="utf-8")
         html = html.replace("{{LEFT_TEXT}}", left_text)
         html = html.replace("{{RIGHT_TEXT}}", right_text)
-        if number is not None:
-            html = html.replace("{{NUMBER}}", number)
         return html
 
-    # --- Standard slides (hook / content / cta) ---
+    # --- Standard slides (first / content / last) ---
     heading     = (slide.get("heading")     or "").strip()
     description = (slide.get("description") or "").strip()
 
-    # Convert **word** markdown to <strong>word</strong>.
     if description:
-        text = f"{_md_bold_to_html(heading)}<br>{_md_bold_to_html(description)}"
+        text = f"{_md_to_html(heading)}<br>{_md_to_html(description)}"
     else:
-        text = _md_bold_to_html(heading)
+        text = _md_to_html(heading)
 
     if index == 0:
         template_name = "slide-first.html"
     elif index == last_index:
         template_name = "slide-last.html"
+        # Default content when the user left the last slide empty
+        if not text:
+            text = _LAST_SLIDE_DEFAULT
     else:
         template_name = "slide-content.html"
 
@@ -130,9 +135,6 @@ def inject_slide(index: int, slide: dict, total: int) -> str:
 
     html = template_path.read_text(encoding="utf-8")
     html = html.replace("{{TEXT}}", text)
-    if number is not None:
-        html = html.replace("{{NUMBER}}", number)
-
     return html
 
 
@@ -182,7 +184,7 @@ def render_slides(
             "Slide %d/%d (%s) — type: %s | text: %r | file: %s",
             i + 1, n, slide_role,
             slide.get("type", "unknown"),
-            slide.get("heading", "")[:60],
+            (slide.get("text_main") or slide.get("heading", ""))[:60],
             html_path.name,
         )
 

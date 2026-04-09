@@ -33,6 +33,7 @@ export default function App() {
   const [hookLoading,   setHookLoading]   = useState(false)
   const [renderLoading, setRenderLoading] = useState(false)
   const [images,        setImages]        = useState([])
+  const [caption,       setCaption]       = useState('')
   const [errorMsg,      setErrorMsg]      = useState('')
   const [toast,         setToast]         = useState(null)
 
@@ -111,6 +112,7 @@ export default function App() {
       }
       const data = await res.json()
       setImages(data.images || [])
+      setCaption(data.caption || '')
       setPhase('done')
       showToast('Carousel rendered!')
     } catch (err) {
@@ -249,13 +251,15 @@ export default function App() {
           <>
             <Output
               images={images}
+              caption={caption}
+              onCaptionChange={setCaption}
               renderLoading={renderLoading}
               errorMsg={errorMsg}
               onToast={showToast}
             />
             <button
               type="button"
-              onClick={() => { setPhase('edit'); setImages([]); setErrorMsg('') }}
+              onClick={() => { setPhase('edit'); setImages([]); setCaption(''); setErrorMsg('') }}
               className="
                 w-full py-3 rounded-xl text-sm font-medium
                 border border-gray-200 dark:border-gray-700
